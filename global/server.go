@@ -50,13 +50,9 @@ func (gb *Server) BroadCast(user *User, msg string) {
 
 func (qd *Server) Handler(conn net.Conn) {
 	//当前链接的业务
-	user := NewUser(conn)
-	//将用户加入到OnlineMap
-	qd.mapLock.Lock()
-	qd.OnlineMap[user.Name] = user
-	//广播用户上线消息
-	qd.BroadCast(user, "上线")
+	user := NewUser(conn, qd)
 
+	user.Online()
 	//接收客户端发送的消息
 	go func() {
 		buf := make([]byte, 4096)
@@ -73,7 +69,7 @@ func (qd *Server) Handler(conn net.Conn) {
 			//提取用户消息
 			msg := string(buf[0 : n-1])
 			//广播
-			qd.BroadCast(user, msg)
+			user.Domessage(msg)
 		}
 	}()
 	//阻塞handler，不然会死亡退出进程
