@@ -3,26 +3,61 @@ package global
 import (
 	"fmt"
 	"net"
+	"sync"
 )
 
 type Server struct {
-	Ip   string
-	Port int
+	Ip        string
+	Port      int
+	OnlineMap map[string]*User
+	mapLock   sync.RWMutex
+	Message   chan string
 }
 
 // 创建一个server的接口
 func Newserver(ip string, port int) *Server {
 	server := &Server{
-		Ip:   ip,
-		Port: port,
+		Ip:        ip,
+		Port:      port,
+		OnlineMap: make(map[string]*User),
+		Message:   make(chan string),
 	}
 
 	return server
 }
 
+// 监听Message广播消息的channel的goroutine，有消息发给全部User
+func (jt *Server) ListenMessager() {
+	for {
+		msg := <-jt.Message
+
+		//msg发送给全部User
+		jt.mapLock.Lock()
+		for _, client := range jt.OnlineMap {
+			client.C <- msg
+		}
+		jt.mapLock.Unlock()
+	}
+}
+
+// 广播消息的方法
+func (gb *Server) BroadCast(user *User, msg string) {
+	sendMsg := "[" + user.Addr + "]" + user.Name + ":" + msg
+
+	gb.Message <- sendMsg
+}
+
 func (qd *Server) Handler(conn net.Conn) {
 	//当前链接的业务
-	fmt.Println("链接建立成功")
+	user := NewUser(conn)
+	//将用户加入到OnlineMap
+	qd.mapLock.Lock()
+	qd.OnlineMap[user.Name] = user
+	//广播用户上线消息
+	qd.BroadCast(user, "上线")
+
+	//阻塞handler，不然会死亡退出进程
+	select {}
 }
 
 // 启动服务器的接口
@@ -35,6 +70,10 @@ func (qd *Server) Start() {
 	}
 	//关闭监听
 	defer listen.Close()
+
+	//  启动监听message的go程
+	go qd.ListenMessager()
+
 	for {
 		conn, err := listen.Accept()
 		if err != nil {
