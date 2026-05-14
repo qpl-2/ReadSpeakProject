@@ -2,6 +2,7 @@ package global
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"sync"
 )
@@ -56,6 +57,25 @@ func (qd *Server) Handler(conn net.Conn) {
 	//广播用户上线消息
 	qd.BroadCast(user, "上线")
 
+	//接收客户端发送的消息
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buf)
+			if n == 0 {
+				qd.BroadCast(user, "下线")
+				return
+			}
+			if err != nil && err == io.EOF {
+				fmt.Println("conn读取错误", err)
+				return
+			}
+			//提取用户消息
+			msg := string(buf[0 : n-1])
+			//广播
+			qd.BroadCast(user, msg)
+		}
+	}()
 	//阻塞handler，不然会死亡退出进程
 	select {}
 }
