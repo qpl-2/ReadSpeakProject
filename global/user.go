@@ -1,6 +1,9 @@
 package global
 
-import "net"
+import (
+	"net"
+	"strings"
+)
 
 type User struct {
 	Name string
@@ -46,7 +49,42 @@ func (qd *User) Offline() {
 	qd.server.BroadCast(qd, "下线")
 }
 
+// 给当前User对应的客户端发送消息
+func (fs *User) Sendmsg(msg string) {
+	fs.conn.Write([]byte(msg))
+}
+
+// 用户处理消息的业务
 func (qd *User) Domessage(msg string) {
+	if msg == "who" {
+		//查询当前在线用户
+		qd.server.mapLock.Lock()
+		for _, user := range qd.server.OnlineMap {
+			onlineMsg := "[" + user.Addr + "]" + user.Name + ":" + "在线...\n"
+			qd.Sendmsg(onlineMsg)
+		}
+		qd.server.mapLock.Unlock()
+	} else if len(msg) > 7 && msg[:7] == "rename" {
+		//rename|xx
+		newName := strings.Split(msg, "|")[1]
+
+		//判断name是否存在
+		_, ok := qd.server.OnlineMap[newName]
+		if ok {
+			qd.Sendmsg("当前用户名存在")
+		} else {
+			qd.server.mapLock.Lock()
+			delete(qd.server.OnlineMap, qd.Name)
+			qd.server.OnlineMap[newName] = qd
+			qd.server.mapLock.Unlock()
+
+			qd.Name = newName
+			qd.Sendmsg("更新用户名成功" + qd.Name + "\n")
+
+		}
+	} else {
+		qd.server.BroadCast(qd, msg)
+	}
 	qd.server.BroadCast(qd, msg)
 }
 
